@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin Panel — Portfolio</title>
+  <style>
+    :root{--bg:#0d1117;--card:#161b22;--accent:#58a6ff;--text:#e6edf3;--muted:#8b949e}
+    body{font-family:Segoe UI,system-ui,Arial;background:var(--bg);color:var(--text);margin:0;padding:32px}
+    .container{max-width:980px;margin:0 auto}
+    .card{background:var(--card);padding:24px;border-radius:12px;border:1px solid #21262d}
+    h1{color:var(--accent);margin:0 0 18px}
+    form label{display:block;color:var(--muted);margin:10px 0 6px}
+    input[type=text],input[type=password]{width:100%;padding:12px;border-radius:8px;border:1px solid #24292f;background:#0f141b;color:var(--text)}
+    button{margin-top:14px;padding:12px 18px;border-radius:8px;border:none;background:var(--accent);color:#0d1117;font-weight:700;cursor:pointer}
+    #status{margin-top:10px;color:var(--muted)}
+    table{width:100%;border-collapse:collapse;margin-top:18px}
+    th,td{padding:10px;border-bottom:1px solid #21262d;text-align:left;color:var(--muted)}
+    th{color:var(--accent);font-weight:600}
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+    .logout{background:transparent;border:1px solid #21262d;color:var(--accent);padding:8px 12px;border-radius:8px;cursor:pointer}
+    .hidden{display:none}
+    pre{white-space:pre-wrap;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div id="login-area">
+        <h1>Admin Panel</h1>
+        <p style="color:var(--muted)">Sign in with the default credentials to view stored contact messages.</p>
+        <form id="login-form">
+          <label for="admin-email">Email</label>
+          <input id="admin-email" type="text" placeholder="admin@example.com" required />
+          <label for="admin-pass">Password</label>
+          <input id="admin-pass" type="password" placeholder="admin123" required />
+          <button type="submit">Sign In</button>
+          <div id="status"></div>
+        </form>
+      </div>
+
+      <div id="panel-area" class="hidden">
+        <div class="topbar">
+          <h1>Messages</h1>
+          <div>
+            <button class="logout" id="logout-btn">Log out</button>
+          </div>
+        </div>
+        <div id="messages-area">
+          <p id="loading" style="color:var(--muted)">Loading messages…</p>
+          <table id="messages-table" class="hidden">
+            <thead>
+              <tr><th>Name</th><th>Email</th><th>Message</th><th>Received</th></tr>
+            </thead>
+            <tbody id="messages-body"></tbody>
+          </table>
+          <p id="no-messages" class="hidden" style="color:var(--muted)">No messages found.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-analytics.js";
+    import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD_peEMmHiKj679URu_cD_HfKhXZj6lsEo",
+      authDomain: "heisenberg-6c134.firebaseapp.com",
+      projectId: "heisenberg-6c134",
+      storageBucket: "heisenberg-6c134.firebasestorage.app",
+      messagingSenderId: "65576763343",
+      appId: "1:65576763343:web:2236a9c4d7b0408cc15cba",
+      measurementId: "G-PM9F1R4ZGR",
+      databaseURL: "https://heisenberg-6c134-default-rtdb.firebaseio.com"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    const db = getDatabase(app);
+
+    // Default admin credentials (stored client-side for simplicity)
+    const ADMIN_EMAIL = 'admin@gmail.com';
+    const ADMIN_PASS = 'admin123';
+
+    const loginForm = document.getElementById('login-form');
+    const statusEl = document.getElementById('status');
+    const loginArea = document.getElementById('login-area');
+    const panelArea = document.getElementById('panel-area');
+    const messagesTable = document.getElementById('messages-table');
+    const messagesBody = document.getElementById('messages-body');
+    const loading = document.getElementById('loading');
+    const noMessages = document.getElementById('no-messages');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    function showStatus(msg, isError = false) {
+      statusEl.textContent = msg;
+      statusEl.style.color = isError ? '#ff7b72' : 'var(--muted)';
+    }
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('admin-email').value.trim();
+      const pass = document.getElementById('admin-pass').value;
+      showStatus('Checking credentials…');
+      if (email === ADMIN_EMAIL && pass === ADMIN_PASS) {
+        // show admin panel
+        loginArea.classList.add('hidden');
+        panelArea.classList.remove('hidden');
+        await loadMessages();
+      } else {
+        showStatus('Invalid credentials', true);
+      }
+    });
+
+    logoutBtn.addEventListener('click', () => {
+      panelArea.classList.add('hidden');
+      loginArea.classList.remove('hidden');
+      messagesBody.innerHTML = '';
+      messagesTable.classList.add('hidden');
+      noMessages.classList.add('hidden');
+      showStatus('Logged out');
+    });
+
+    async function loadMessages() {
+      loading.classList.remove('hidden');
+      messagesTable.classList.add('hidden');
+      noMessages.classList.add('hidden');
+      try {
+        const snap = await get(ref(db, 'contactMessages'));
+        loading.classList.add('hidden');
+        if (!snap.exists()) {
+          noMessages.classList.remove('hidden');
+          return;
+        }
+        const data = snap.val();
+        const entries = Object.entries(data).map(([id, val]) => ({ id, ...val }));
+        entries.sort((a,b)=> (b.createdAt || 0) - (a.createdAt || 0));
+        messagesBody.innerHTML = '';
+        for (const row of entries) {
+          const tr = document.createElement('tr');
+          const dateNum = (typeof row.createdAt === 'number') ? row.createdAt : (row.createdAt && row.createdAt['.sv'] ? Date.now() : 0);
+          const dateText = dateNum ? new Date(dateNum).toLocaleString() : '-';
+          tr.innerHTML = `<td>${escapeHtml(row.name || '')}</td><td>${escapeHtml(row.email || '')}</td><td>${escapeHtml(row.message || '')}</td><td>${dateText}</td>`;
+          messagesBody.appendChild(tr);
+        }
+        messagesTable.classList.remove('hidden');
+      } catch (err) {
+        console.error('Failed to load messages', err);
+        loading.classList.add('hidden');
+        showStatus('Failed to load messages. See console.', true);
+      }
+    }
+
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"']/g, (c)=>({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"
+      }[c]));
+    }
+
+  </script>
+</body>
+</html>
